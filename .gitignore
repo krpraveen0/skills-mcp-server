@@ -1,0 +1,31 @@
+# Environment
+.env
+.env.local
+.env.production
+
+# Go
+backend/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Docker
+.docker-data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Binaries
+backend/server
+backend/worker

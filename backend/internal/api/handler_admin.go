@@ -1,0 +1,123 @@
+package api
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/krpraveen0/skills-mcp-server/internal/auth"
+	"github.com/krpraveen0/skills-mcp-server/internal/crawler"
+	"github.com/krpraveen0/skills-mcp-server/internal/db"
+	"github.com/krpraveen0/skills-mcp-server/pkg/models"
+)
+
+// AdminHandler contains handlers for the admin API.
+type AdminHandler struct {
+	db         *db.DB
+	authSvc    *auth.Service
+	crawlerSvc *crawler.Crawler
+}
+
+// NewAdminHandler creates a new admin handler.
+func NewAdminHandler(database *db.DB, authSvc *auth.Service, crawlerSvc *crawler.Crawler) *AdminHandler {
+	return &AdminHandler{db: database, authSvc: authSvc, crawlerSvc: crawlerSvc}
+}
+
+// Stats handles GET /api/v1/admin/stats
+func (h *AdminHandler) Stats(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	totalSkills, todaySkills, err := h.db.GetSkillStats(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: "internal_error", Code: 500, Message: err.Error(),
+		})
+		return
+	}
+
+	jobs, _ := h.db.ListCrawlJobs(ctx, 1)
+	lastCrawlStatus := "never"
+	var lastCrawlAt interface{} = nil
+	if len(jobs) > 0 {
+		lastCrawlAt = jobs[0].CompletedAt
+		lastCrawlStatus = jobs[0].Status
+	}
+
+	keys, _ := h.db.ListAPIKeys(ctx)
+
+	c.JSON(http.StatusOK, gin.H{
+		"total_skills":       totalSkills,
+		"total_api_keys":     len(keys),
+		"last_crawl_at":      lastCrawlAt,
+		"last_crawl_status":  lastCrawlStatus,
+		"skills_added_today": todaySkills,
+		"top_tags":           []interface{}{},
+	})
+}
+
+// ListKeys handles GET /api/v1/admin/keys
+func (h *AdminHandler) ListKeys(c *gin.Context) {
+	keys, err := h.db.ListAPIKeys(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: "internal_error", Code: 500, Message: err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"keys": keys, "count": len(keys)})
+}
+
+// CreateKey handles POST /api/v1/admin/keys
+func (h *AdminHandler) CreateKey(c *gin.Context) {
+	var req models.CreateAPIKeyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error: "bad_request", Code: 400, Message: err.Error(),
+		})
+		return
+	}
+
+	resp, err := h.authSvc.GenerateKey(c.Request.Context(), &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: "internal_error", Code: 500, Message: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, resp)
+}
+
+// RevokeKey handles DELETE /api/v1/admin/keys/:id
+func (h *AdminHandler) RevokeKey(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.db.RevokeAPIKey(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: "internal_error", Code: 500, Message: err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Key revoked"})
+}
+
+// ListCrawlJobs handles GET /api/v1/admin/crawl/jobs
+func (h *AdminHandler) ListCrawlJobs(c *gin.Context) {
+	limit := parseIntParam(c.Query("limit"), 20, 1, 100)
+	jobs, err := h.db.ListCrawlJobs(c.Request.Context(), limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: "internal_error", Code: 500, Message: err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"jobs": jobs, "count": len(jobs)})
+}
+
+// TriggerCrawl handles POST /api/v1/admin/crawl/trigger
+func (h *AdminHandler) TriggerCrawl(c *gin.Context) {
+	go func() {
+		_, _ = h.crawlerSvc.Run(c.Request.Context())
+	}()
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Crawl job triggered and running in the background.",
+	})
+}

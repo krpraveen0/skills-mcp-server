@@ -1,0 +1,85 @@
+version: '3.9'
+
+services:
+  # ─── Redis ───────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ─── Go HTTP Server ───────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile.backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ENV=production
+      - SQLITE_PATH=/data/skills.db
+      - REDIS_URL=redis://redis:6379
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - API_KEY_SALT=${API_KEY_SALT}
+      - CACHE_TTL_SEARCH=3600
+      - CACHE_TTL_TRENDING=86400
+      - CACHE_TTL_SKILL=3600
+    volumes:
+      - sqlite_data:/data
+      - ./backend/migrations:/migrations:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── Background Crawl Worker ──────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile.backend
+    entrypoint: ["/worker"]
+    restart: unless-stopped
+    environment:
+      - ENV=production
+      - SQLITE_PATH=/data/skills.db
+      - REDIS_URL=redis://redis:6379
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - CRAWL_SCHEDULE=0 2 * * *
+      - CRAWL_MAX_RESULTS=1000
+      - API_KEY_SALT=${API_KEY_SALT}
+    volumes:
+      - sqlite_data:/data
+      - ./backend/migrations:/migrations:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ─── React Frontend (Nginx) ───────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  redis_data:
+  sqlite_data:
