@@ -1,4 +1,4 @@
-import { createTheme } from '@mui/material/styles'
+import { createTheme } from '@mui/material'
 
 // Skills MCP Server — Material UI theme
 // Design language: Developer-focused, dark-first, clean & minimal
@@ -44,9 +44,6 @@ export const theme = createTheme({
     h5: { fontWeight: 600 },
     h6: { fontWeight: 600 },
     body1: { lineHeight: 1.7 },
-    code: {
-      fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
-    },
   },
   shape: {
     borderRadius: 10,

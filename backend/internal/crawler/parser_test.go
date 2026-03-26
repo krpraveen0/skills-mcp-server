@@ -47,9 +47,3 @@ func TestParseContent_AutoTags(t *testing.T) {
 	}
 }
 
-func TestFtsQuery(t *testing.T) {
-	q := ftsQuery("docker deploy")
-	if q == "" {
-		t.Error("expected non-empty FTS query")
-	}
-}

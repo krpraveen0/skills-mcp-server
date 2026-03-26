@@ -162,7 +162,7 @@ func (g *GitHubClient) GetFileContent(ctx context.Context, owner, repo, path str
 	}
 
 	// Get last commit date for the file
-	commits, _, resp2, err := g.client.Repositories.ListCommits(ctx, owner, repo, &github.CommitsListOptions{
+	commits, resp2, err := g.client.Repositories.ListCommits(ctx, owner, repo, &github.CommitsListOptions{
 		Path: path,
 		ListOptions: github.ListOptions{PerPage: 1},
 	})
