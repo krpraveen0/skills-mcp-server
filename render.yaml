@@ -1,12 +1,13 @@
 services:
-  # ── Redis Cache ────────────────────────────────────────
-  - type: redis
+  # ── Redis / Key Value Cache ────────────────────────────
+  - type: keyvalue
     name: skills-mcp-redis
     plan: free
     region: oregon
     ipAllowList:
       - source: 0.0.0.0/0
-        description: allow all (internal use only)
+        description: everywhere
+    maxmemoryPolicy: allkeys-lru
 
   # ── Go Backend API Server ──────────────────────────────
   - type: web
@@ -15,9 +16,10 @@ services:
     dockerfilePath: ./docker/Dockerfile.backend
     dockerContext: ./backend
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     region: oregon
     plan: free
+    healthCheckPath: /health
     envVars:
       - key: PORT
         value: 8080
@@ -29,11 +31,11 @@ services:
         value: /migrations
       - key: REDIS_URL
         fromService:
-          type: redis
+          type: keyvalue
           name: skills-mcp-redis
           property: connectionString
       - key: GITHUB_TOKEN
-        sync: false   # Set manually in Render dashboard
+        sync: false
       - key: ADMIN_API_KEY
         generateValue: true
       - key: API_KEY_SALT
@@ -49,50 +51,15 @@ services:
       - key: CRAWL_MAX_RESULTS
         value: "500"
 
-  # ── Background Crawl Worker ────────────────────────────
-  - type: worker
-    name: skills-mcp-worker
-    runtime: docker
-    dockerfilePath: ./docker/Dockerfile.backend
-    dockerContext: ./backend
-    dockerCommand: /worker
-    branch: main
-    autoDeploy: true
-    region: oregon
-    plan: free
-    envVars:
-      - key: ENV
-        value: production
-      - key: SQLITE_PATH
-        value: /tmp/skills.db
-      - key: MIGRATIONS_PATH
-        value: /migrations
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: skills-mcp-redis
-          property: connectionString
-      - key: GITHUB_TOKEN
-        sync: false
-      - key: API_KEY_SALT
-        fromService:
-          type: web
-          name: skills-mcp-backend
-          envVarKey: API_KEY_SALT
-      - key: CRAWL_SCHEDULE
-        value: "0 2 * * *"
-      - key: CRAWL_MAX_RESULTS
-        value: "500"
-
   # ── React Frontend (Static Site) ──────────────────────
+  # Note: region is NOT valid for static sites per Render spec
   - type: web
     name: skills-mcp-frontend
     runtime: static
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: ./frontend/dist
     branch: main
-    autoDeploy: true
-    region: oregon
+    autoDeployTrigger: commit
     plan: free
     headers:
       - path: /*
