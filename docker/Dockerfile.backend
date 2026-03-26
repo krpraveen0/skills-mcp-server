@@ -33,13 +33,9 @@ RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /bin/server /server
 COPY --from=builder /bin/worker /worker
 
-# Copy migrations into image (MIGRATIONS_PATH=/migrations)
-COPY --from=builder /app/migrations /migrations
-
 # Data volume for SQLite persistence
 VOLUME ["/data"]
 
-ENV MIGRATIONS_PATH=/migrations
 ENV PORT=8080
 
 EXPOSE 8080
