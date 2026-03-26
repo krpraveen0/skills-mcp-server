@@ -21,6 +21,7 @@ type RouterDeps struct {
 	CacheTTLSearch int
 	CacheTTLTrend  int
 	CacheTTLSkill  int
+	AdminAPIKey    string // bypass key for bootstrapping the first DB key
 }
 
 // NewRouter builds and returns the Gin engine with all routes configured.
@@ -40,10 +41,10 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	})
 
 	// MCP endpoint (auth required)
-	r.POST("/mcp", AuthMiddleware(deps.Auth), deps.MCPServer.Handle)
+	r.POST("/mcp", AuthMiddleware(deps.Auth, deps.AdminAPIKey), deps.MCPServer.Handle)
 
 	// API v1 — protected routes
-	v1 := r.Group("/api/v1", AuthMiddleware(deps.Auth))
+	v1 := r.Group("/api/v1", AuthMiddleware(deps.Auth, deps.AdminAPIKey))
 	{
 		// Skills
 		skills := v1.Group("/skills")

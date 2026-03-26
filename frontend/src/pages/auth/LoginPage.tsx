@@ -21,8 +21,8 @@ export function LoginPage() {
   const [error, setError] = useState('')
 
   const handleLogin = async () => {
-    if (!key.startsWith('sk_live_')) {
-      setError('API key must start with sk_live_')
+    if (key.trim().length < 8) {
+      setError('Please enter a valid API key')
       return
     }
     setLoading(true)
@@ -89,7 +89,7 @@ export function LoginPage() {
             fullWidth
             label="API Key"
             type={showKey ? 'text' : 'password'}
-            placeholder="sk_live_..."
+            placeholder="sk_live_... or your ADMIN_API_KEY"
             value={key}
             onChange={(e) => setKey(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleLogin()}

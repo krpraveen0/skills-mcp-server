@@ -14,15 +14,30 @@ import (
 const apiKeyContextKey = "api_key"
 
 // AuthMiddleware validates Bearer API keys for all protected routes.
-func AuthMiddleware(authSvc *auth.Service) gin.HandlerFunc {
+// If adminKey is non-empty and the request presents that exact key, the DB
+// lookup is skipped — this allows the first admin to log in and create real
+// API keys before any exist in the database (bootstrap flow).
+func AuthMiddleware(authSvc *auth.Service, adminKey string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rawKey := extractBearerToken(c)
 		if rawKey == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, models.ErrorResponse{
 				Error:   "unauthorized",
 				Code:    401,
-				Message: "Missing Authorization header. Use: Authorization: Bearer sk_live_...",
+				Message: "Missing Authorization header. Use: Authorization: Bearer <api_key>",
 			})
+			return
+		}
+
+		// Admin bootstrap: ADMIN_API_KEY env var bypasses the DB entirely.
+		if adminKey != "" && rawKey == adminKey {
+			c.Set(apiKeyContextKey, &models.APIKey{
+				ID:        "admin-env",
+				Name:      "Admin (env bootstrap)",
+				IsActive:  true,
+				RateLimit: 999999,
+			})
+			c.Next()
 			return
 		}
 

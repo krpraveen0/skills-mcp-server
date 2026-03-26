@@ -63,6 +63,7 @@ func main() {
 		CacheTTLSearch: cfg.CacheTTLSearch,
 		CacheTTLTrend:  cfg.CacheTTLTrending,
 		CacheTTLSkill:  cfg.CacheTTLSkill,
+		AdminAPIKey:    cfg.AdminAPIKey,
 	})
 
 	// --- HTTP Server ---
