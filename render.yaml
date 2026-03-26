@@ -52,7 +52,7 @@ services:
         value: "500"
 
   # ── React Frontend (Static Site) ──────────────────────
-  # Note: region is NOT valid for static sites per Render spec
+  # Static sites are always free — no plan/region fields per Render spec
   - type: web
     name: skills-mcp-frontend
     runtime: static
@@ -60,7 +60,6 @@ services:
     staticPublishPath: ./frontend/dist
     branch: main
     autoDeployTrigger: commit
-    plan: free
     headers:
       - path: /*
         name: X-Frame-Options

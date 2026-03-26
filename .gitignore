@@ -1,31 +1,41 @@
-# Environment
+# ── Secrets & local scripts ───────────────────────────
 .env
 .env.local
 .env.production
+push-to-github.sh   # contains PAT token, never commit
 
-# Go
+# ── Go ────────────────────────────────────────────────
 backend/data/
 *.db
 *.db-shm
 *.db-wal
+backend/tmp/
 
-# Node
+# ── Node ──────────────────────────────────────────────
 frontend/node_modules/
 frontend/dist/
+node_modules/
 
-# Docker
+# ── Docker local volumes ──────────────────────────────
 .docker-data/
 
-# IDE
+# ── Build outputs ─────────────────────────────────────
+backend/server
+backend/worker
+dist/
+build/
+
+# ── Logs ──────────────────────────────────────────────
+*.log
+logs/
+
+# ── IDE ───────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
 *.swo
+.cursor/
 
-# OS
+# ── OS ────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-
-# Binaries
-backend/server
-backend/worker
