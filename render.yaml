@@ -20,15 +20,17 @@ services:
     region: oregon
     plan: free
     healthCheckPath: /health
+    disk:
+      name: skills-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
       - key: PORT
         value: 8080
       - key: ENV
         value: production
       - key: SQLITE_PATH
-        value: /tmp/skills.db
-      - key: MIGRATIONS_PATH
-        value: /migrations
+        value: /data/skills.db
       - key: REDIS_URL
         fromService:
           type: keyvalue

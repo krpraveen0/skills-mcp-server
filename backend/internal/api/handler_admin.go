@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/krpraveen0/skills-mcp-server/internal/auth"
@@ -113,9 +115,14 @@ func (h *AdminHandler) ListCrawlJobs(c *gin.Context) {
 }
 
 // TriggerCrawl handles POST /api/v1/admin/crawl/trigger
+// NOTE: must use context.Background() — c.Request.Context() is cancelled
+// the moment the HTTP response is written, which would abort the crawl.
 func (h *AdminHandler) TriggerCrawl(c *gin.Context) {
+	// 30-minute timeout for a full crawl cycle
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	go func() {
-		_, _ = h.crawlerSvc.Run(c.Request.Context())
+		defer cancel()
+		_, _ = h.crawlerSvc.Run(ctx)
 	}()
 	c.JSON(http.StatusAccepted, gin.H{
 		"message": "Crawl job triggered and running in the background.",
