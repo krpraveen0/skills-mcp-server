@@ -1,11 +1,20 @@
 services:
-  # ── Go Backend API Server ─────────────────────────────
+  # ── Redis Cache ────────────────────────────────────────
+  - type: redis
+    name: skills-mcp-redis
+    plan: free
+    region: oregon
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: allow all (internal use only)
+
+  # ── Go Backend API Server ──────────────────────────────
   - type: web
     name: skills-mcp-backend
     runtime: docker
     dockerfilePath: ./docker/Dockerfile.backend
     dockerContext: ./backend
-    branch: release/*
+    branch: main
     autoDeploy: true
     region: oregon
     plan: free
@@ -15,7 +24,7 @@ services:
       - key: ENV
         value: production
       - key: SQLITE_PATH
-        value: /data/skills.db
+        value: /tmp/skills.db
       - key: MIGRATIONS_PATH
         value: /migrations
       - key: REDIS_URL
@@ -39,19 +48,15 @@ services:
         value: "0 2 * * *"
       - key: CRAWL_MAX_RESULTS
         value: "500"
-    disk:
-      name: skills-data
-      mountPath: /data
-      sizeGB: 1
 
-  # ── Background Crawl Worker ───────────────────────────
+  # ── Background Crawl Worker ────────────────────────────
   - type: worker
     name: skills-mcp-worker
     runtime: docker
     dockerfilePath: ./docker/Dockerfile.backend
     dockerContext: ./backend
     dockerCommand: /worker
-    branch: release/*
+    branch: main
     autoDeploy: true
     region: oregon
     plan: free
@@ -59,7 +64,7 @@ services:
       - key: ENV
         value: production
       - key: SQLITE_PATH
-        value: /data/skills.db
+        value: /tmp/skills.db
       - key: MIGRATIONS_PATH
         value: /migrations
       - key: REDIS_URL
@@ -78,18 +83,14 @@ services:
         value: "0 2 * * *"
       - key: CRAWL_MAX_RESULTS
         value: "500"
-    disk:
-      name: skills-data
-      mountPath: /data
-      sizeGB: 1
 
-  # ── React Frontend (Static Site) ─────────────────────
+  # ── React Frontend (Static Site) ──────────────────────
   - type: web
     name: skills-mcp-frontend
     runtime: static
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: ./frontend/dist
-    branch: release/*
+    branch: main
     autoDeploy: true
     region: oregon
     plan: free
@@ -112,15 +113,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: skills-mcp-backend
-          property: host
-
-# ── Redis ─────────────────────────────────────────────
-databases:
-  - name: skills-mcp-redis
-    type: redis
-    plan: free
-    region: oregon
-    maxmemoryPolicy: allkeys-lru
+        value: https://skills-mcp-backend.onrender.com
