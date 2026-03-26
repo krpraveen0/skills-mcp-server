@@ -2,7 +2,8 @@
 .env
 .env.local
 .env.production
-push-to-github.sh   # contains PAT token, never commit
+# push-to-github.sh contains a PAT token — never commit it
+push-to-github.sh
 
 # ── Go ────────────────────────────────────────────────
 backend/data/
