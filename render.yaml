@@ -56,7 +56,7 @@ services:
   - type: web
     name: skills-mcp-frontend
     runtime: static
-    buildCommand: cd frontend && npm ci && npm run build
+    buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
     branch: main
     autoDeployTrigger: commit

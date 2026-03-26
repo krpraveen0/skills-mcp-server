@@ -70,13 +70,6 @@ jobs:
             -d "" \
             -o /dev/null -w "HTTP %{http_code}\n"
 
-      - name: Trigger Render worker deploy
-        run: |
-          curl -fsSL "${{ secrets.RENDER_WORKER_DEPLOY_HOOK }}" \
-            -X POST \
-            -d "" \
-            -o /dev/null -w "HTTP %{http_code}\n"
-
       - name: Trigger Render frontend deploy
         run: |
           curl -fsSL "${{ secrets.RENDER_FRONTEND_DEPLOY_HOOK }}" \
