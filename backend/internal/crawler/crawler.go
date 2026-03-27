@@ -68,9 +68,9 @@ func (c *Crawler) Run(ctx context.Context) (*models.CrawlJob, error) {
 		log.Printf("[crawler] Failed to update crawl job: %v", err)
 	}
 
-	// Bust trending cache after every crawl
-	c.cache.DeletePattern(ctx, "mcp:trending:*")
-	c.cache.DeletePattern(ctx, "mcp:search:*")
+	// Bust search + trending caches so the Explorer shows fresh data
+	c.cache.DeletePattern(ctx, "api:search:*")
+	c.cache.DeletePattern(ctx, "api:trending:*")
 
 	return job, nil
 }
