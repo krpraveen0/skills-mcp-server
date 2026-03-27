@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/krpraveen0/skills-mcp-server/pkg/models"
@@ -12,8 +13,25 @@ import (
 
 // ---- Skills ----
 
+// sanitizeUTF8 strips any invalid UTF-8 bytes from s.
+// PostgreSQL requires strict UTF-8; some GitHub files contain byte sequences
+// from non-UTF-8 encodings (e.g. Shift-JIS) that would cause a
+// "pq: invalid byte sequence" error without this guard.
+func sanitizeUTF8(s string) string {
+	return strings.ToValidUTF8(s, "")
+}
+
 // UpsertSkill inserts or updates a skill record.
 func (d *DB) UpsertSkill(ctx context.Context, s *models.Skill) error {
+	// Sanitize all free-text fields before hitting PostgreSQL's strict UTF-8
+	s.Content = sanitizeUTF8(s.Content)
+	s.Title = sanitizeUTF8(s.Title)
+	s.Description = sanitizeUTF8(s.Description)
+	s.FilePath = sanitizeUTF8(s.FilePath)
+	for i, tag := range s.Tags {
+		s.Tags[i] = sanitizeUTF8(tag)
+	}
+
 	tagsJSON, _ := json.Marshal(s.Tags)
 	scoreJSON, _ := json.Marshal(s.ScoreBreakdown)
 
