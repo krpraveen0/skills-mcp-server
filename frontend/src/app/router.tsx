@@ -4,6 +4,7 @@ import { App } from './App'
 import { ExplorerPage } from '@/pages/explorer/ExplorerPage'
 import { AdminDashboard } from '@/pages/admin/AdminDashboard'
 import { LoginPage } from '@/pages/auth/LoginPage'
+import { SkillDetailPage } from '@/pages/skill/SkillDetailPage'
 import { useAppStore } from '@/store/useAppStore'
 
 // Auth guard — redirects to /auth if not logged in
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <ExplorerPage /> },
       { path: 'admin', element: <AdminDashboard /> },
+      { path: 'skills/:id', element: <SkillDetailPage /> },
     ],
   },
 ])
