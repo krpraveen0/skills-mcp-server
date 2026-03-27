@@ -89,7 +89,7 @@ func (d *DB) GetSkillByID(ctx context.Context, id string) (*models.Skill, error)
 		return nil, err
 	}
 
-	if err := json.Unmarshal([]byte(tagsJSON), &s.Tags); err != nil {
+	if err := json.Unmarshal([]byte(tagsJSON), &s.Tags); err != nil || s.Tags == nil {
 		s.Tags = []string{}
 	}
 	if err := json.Unmarshal([]byte(scoreJSON), &s.ScoreBreakdown); err != nil {
@@ -338,7 +338,7 @@ func scanSkills(rows *sql.Rows) ([]models.Skill, error) {
 		); err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal([]byte(tagsJSON), &s.Tags); err != nil {
+		if err := json.Unmarshal([]byte(tagsJSON), &s.Tags); err != nil || s.Tags == nil {
 			s.Tags = []string{}
 		}
 		if err := json.Unmarshal([]byte(scoreJSON), &s.ScoreBreakdown); err != nil {
