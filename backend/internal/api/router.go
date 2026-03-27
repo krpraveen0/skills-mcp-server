@@ -33,7 +33,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 
 	// Initialize handlers
 	skillsHandler := NewSkillsHandler(deps.DB, deps.Cache, deps.CacheTTLSearch, deps.CacheTTLTrend, deps.CacheTTLSkill)
-	adminHandler  := NewAdminHandler(deps.DB, deps.Auth, deps.Crawler)
+	adminHandler  := NewAdminHandler(deps.DB, deps.Auth, deps.Crawler, deps.Cache)
 
 	// Health check (no auth)
 	r.GET("/health", func(c *gin.Context) {
@@ -71,6 +71,11 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 			{
 				crawl.GET("/jobs", adminHandler.ListCrawlJobs)
 				crawl.POST("/trigger", adminHandler.TriggerCrawl)
+			}
+
+			cache := admin.Group("/cache")
+			{
+				cache.POST("/flush", adminHandler.FlushCache)
 			}
 		}
 	}

@@ -17,11 +17,17 @@ type AdminHandler struct {
 	db         *db.DB
 	authSvc    *auth.Service
 	crawlerSvc *crawler.Crawler
+	cache      cacheFlushable
+}
+
+// cacheFlushable is the subset of cache.Redis needed by AdminHandler.
+type cacheFlushable interface {
+	DeletePattern(ctx context.Context, pattern string) error
 }
 
 // NewAdminHandler creates a new admin handler.
-func NewAdminHandler(database *db.DB, authSvc *auth.Service, crawlerSvc *crawler.Crawler) *AdminHandler {
-	return &AdminHandler{db: database, authSvc: authSvc, crawlerSvc: crawlerSvc}
+func NewAdminHandler(database *db.DB, authSvc *auth.Service, crawlerSvc *crawler.Crawler, c cacheFlushable) *AdminHandler {
+	return &AdminHandler{db: database, authSvc: authSvc, crawlerSvc: crawlerSvc, cache: c}
 }
 
 // Stats handles GET /api/v1/admin/stats
@@ -112,6 +118,26 @@ func (h *AdminHandler) ListCrawlJobs(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs, "count": len(jobs)})
+}
+
+// FlushCache handles POST /api/v1/admin/cache/flush
+// Evicts all api:search:* and api:trending:* keys so the Explorer shows
+// fresh data without waiting for the next crawl or the TTL to expire.
+func (h *AdminHandler) FlushCache(c *gin.Context) {
+	ctx := c.Request.Context()
+	if err := h.cache.DeletePattern(ctx, "api:search:*"); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: "internal_error", Code: 500, Message: "flush search cache: " + err.Error(),
+		})
+		return
+	}
+	if err := h.cache.DeletePattern(ctx, "api:trending:*"); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: "internal_error", Code: 500, Message: "flush trending cache: " + err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Cache flushed. Search and trending results will be refreshed from DB."})
 }
 
 // TriggerCrawl handles POST /api/v1/admin/crawl/trigger
