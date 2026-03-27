@@ -14,7 +14,6 @@ services:
     name: skills-mcp-db
     plan: free
     region: oregon
-    postgresMajorVersion: 16
 
   # ── Go Backend API Server ──────────────────────────────
   - type: web
