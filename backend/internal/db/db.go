@@ -4,10 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/lib/pq"
 )
 
 // DB wraps a sql.DB connection with helper methods.
@@ -39,38 +37,31 @@ CREATE TABLE IF NOT EXISTS skills (
     forks           INTEGER NOT NULL DEFAULT 0,
     watchers        INTEGER NOT NULL DEFAULT 0,
     community_refs  INTEGER NOT NULL DEFAULT 0,
-    last_updated_at DATETIME,
-    indexed_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    score           REAL NOT NULL DEFAULT 0.0,
+    last_updated_at TIMESTAMPTZ,
+    indexed_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    score           DOUBLE PRECISION NOT NULL DEFAULT 0.0,
     score_breakdown TEXT NOT NULL DEFAULT '{}',
-    is_active       INTEGER NOT NULL DEFAULT 1
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE
 );
 CREATE INDEX IF NOT EXISTS idx_skills_score   ON skills(score DESC);
 CREATE INDEX IF NOT EXISTS idx_skills_repo    ON skills(repo_owner, repo_name);
 CREATE INDEX IF NOT EXISTS idx_skills_active  ON skills(is_active);
 CREATE INDEX IF NOT EXISTS idx_skills_indexed ON skills(indexed_at DESC);
-CREATE VIRTUAL TABLE IF NOT EXISTS skills_fts USING fts5(
-    id UNINDEXED,
-    title,
-    description,
-    tags,
-    content='skills',
-    content_rowid='rowid'
-);
-CREATE TRIGGER IF NOT EXISTS skills_fts_insert AFTER INSERT ON skills BEGIN
-    INSERT INTO skills_fts(rowid, id, title, description, tags)
-    VALUES (new.rowid, new.id, new.title, new.description, new.tags);
-END;
-CREATE TRIGGER IF NOT EXISTS skills_fts_update AFTER UPDATE ON skills BEGIN
-    INSERT INTO skills_fts(skills_fts, rowid, id, title, description, tags)
-    VALUES ('delete', old.rowid, old.id, old.title, old.description, old.tags);
-    INSERT INTO skills_fts(rowid, id, title, description, tags)
-    VALUES (new.rowid, new.id, new.title, new.description, new.tags);
-END;
-CREATE TRIGGER IF NOT EXISTS skills_fts_delete AFTER DELETE ON skills BEGIN
-    INSERT INTO skills_fts(skills_fts, rowid, id, title, description, tags)
-    VALUES ('delete', old.rowid, old.id, old.title, old.description, old.tags);
-END;
+ALTER TABLE skills ADD COLUMN IF NOT EXISTS search_vector tsvector;
+CREATE INDEX IF NOT EXISTS idx_skills_fts ON skills USING GIN(search_vector);
+CREATE OR REPLACE FUNCTION skills_search_vector_update() RETURNS trigger AS $$
+BEGIN
+    NEW.search_vector :=
+        setweight(to_tsvector('english', coalesce(NEW.title, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(NEW.description, '')), 'B') ||
+        setweight(to_tsvector('english', coalesce(NEW.tags, '')), 'C');
+    RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS skills_search_vector_trigger ON skills;
+CREATE TRIGGER skills_search_vector_trigger
+    BEFORE INSERT OR UPDATE ON skills
+    FOR EACH ROW EXECUTE FUNCTION skills_search_vector_update();
 `},
 	{2, `
 CREATE TABLE IF NOT EXISTS api_keys (
@@ -82,10 +73,10 @@ CREATE TABLE IF NOT EXISTS api_keys (
     rate_limit   INTEGER NOT NULL DEFAULT 1000,
     calls_today  INTEGER NOT NULL DEFAULT 0,
     total_calls  INTEGER NOT NULL DEFAULT 0,
-    is_admin     INTEGER NOT NULL DEFAULT 0,
-    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_used_at DATETIME,
-    is_active    INTEGER NOT NULL DEFAULT 1
+    is_admin     BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ,
+    is_active    BOOLEAN NOT NULL DEFAULT TRUE
 );
 CREATE INDEX IF NOT EXISTS idx_api_keys_hash   ON api_keys(key_hash);
 CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(is_active);
@@ -93,8 +84,8 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(is_active);
 	{3, `
 CREATE TABLE IF NOT EXISTS crawl_jobs (
     id              TEXT PRIMARY KEY,
-    started_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at    DATETIME,
+    started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at    TIMESTAMPTZ,
     status          TEXT NOT NULL DEFAULT 'pending',
     skills_found    INTEGER NOT NULL DEFAULT 0,
     skills_updated  INTEGER NOT NULL DEFAULT 0,
@@ -110,7 +101,7 @@ CREATE TABLE IF NOT EXISTS skill_submissions (
     id           TEXT PRIMARY KEY,
     github_url   TEXT NOT NULL,
     submitted_by TEXT NOT NULL DEFAULT '',
-    submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     status       TEXT NOT NULL DEFAULT 'pending',
     notes        TEXT NOT NULL DEFAULT ''
 );
@@ -119,30 +110,18 @@ CREATE INDEX IF NOT EXISTS idx_submissions_url    ON skill_submissions(github_ur
 `},
 }
 
-// New opens a SQLite database, creates the data directory if needed,
-// and runs all pending migrations.
-func New(path string) (*DB, error) {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("create data dir: %w", err)
-	}
-
-	// modernc sqlite driver is registered as "sqlite"
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=journal_mode%%3DWAL&_pragma=foreign_keys%%3Don&_pragma=busy_timeout%%3D5000",
-		path,
-	)
-	sqlDB, err := sql.Open("sqlite", dsn)
+// New opens a PostgreSQL database and runs all pending migrations.
+func New(dsn string) (*DB, error) {
+	sqlDB, err := sql.Open("postgres", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
+		return nil, fmt.Errorf("open postgres: %w", err)
 	}
 
-	// SQLite benefits from limited connections
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(5)
 
 	if err := sqlDB.Ping(); err != nil {
-		return nil, fmt.Errorf("ping sqlite: %w", err)
+		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 
 	database := &DB{sqlDB}
@@ -151,7 +130,7 @@ func New(path string) (*DB, error) {
 		return nil, fmt.Errorf("migrations: %w", err)
 	}
 
-	log.Printf("[db] Connected to SQLite at %s", path)
+	log.Printf("[db] Connected to PostgreSQL")
 	return database, nil
 }
 
@@ -161,7 +140,7 @@ func (d *DB) runMigrations() error {
 	if _, err := d.Exec(`
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version    INTEGER PRIMARY KEY,
-			applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`); err != nil {
 		return fmt.Errorf("create schema_migrations: %w", err)
 	}
@@ -169,7 +148,7 @@ func (d *DB) runMigrations() error {
 	for _, m := range migrations {
 		var count int
 		if err := d.QueryRow(
-			"SELECT COUNT(*) FROM schema_migrations WHERE version = ?", m.version,
+			"SELECT COUNT(*) FROM schema_migrations WHERE version = $1", m.version,
 		).Scan(&count); err != nil {
 			return fmt.Errorf("check migration %d: %w", m.version, err)
 		}
@@ -182,7 +161,7 @@ func (d *DB) runMigrations() error {
 		}
 
 		if _, err := d.Exec(
-			"INSERT INTO schema_migrations (version) VALUES (?)", m.version,
+			"INSERT INTO schema_migrations (version) VALUES ($1)", m.version,
 		); err != nil {
 			return fmt.Errorf("record migration %d: %w", m.version, err)
 		}

@@ -15,7 +15,7 @@ type Config struct {
 	Env  string
 
 	// Database
-	SQLitePath string
+	DatabaseURL string
 
 	// Redis
 	RedisURL      string
@@ -51,7 +51,7 @@ func Load() *Config {
 	return &Config{
 		Port:       getEnv("PORT", "8080"),
 		Env:        getEnv("ENV", "development"),
-		SQLitePath: getEnv("SQLITE_PATH", "./data/skills.db"),
+		DatabaseURL: getEnv("DATABASE_URL", "postgres://localhost:5432/skills?sslmode=disable"),
 
 		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),

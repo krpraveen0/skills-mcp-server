@@ -26,7 +26,7 @@ func main() {
 	log.Printf("[main] Starting skills-mcp-server (env=%s)", cfg.Env)
 
 	// --- Database ---
-	database, err := db.New(cfg.SQLitePath)
+	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("[main] Database init failed: %v", err)
 	}

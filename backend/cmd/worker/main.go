@@ -21,7 +21,7 @@ func main() {
 	log.Printf("[worker] Starting crawl worker (env=%s)", cfg.Env)
 
 	// --- Database ---
-	database, err := db.New(cfg.SQLitePath)
+	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("[worker] Database init failed: %v", err)
 	}

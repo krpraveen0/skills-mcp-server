@@ -33,9 +33,6 @@ RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /bin/server /server
 COPY --from=builder /bin/worker /worker
 
-# Data volume for SQLite persistence
-VOLUME ["/data"]
-
 ENV PORT=8080
 
 EXPOSE 8080
