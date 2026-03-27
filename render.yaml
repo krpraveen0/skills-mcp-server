@@ -1,3 +1,9 @@
+databases:
+  # ── PostgreSQL Database ────────────────────────────────
+  - name: skills-mcp-db
+    plan: free
+    region: oregon
+
 services:
   # ── Redis / Key Value Cache ────────────────────────────
   - type: keyvalue
@@ -8,12 +14,6 @@ services:
       - source: 0.0.0.0/0
         description: everywhere
     maxmemoryPolicy: allkeys-lru
-
-  # ── PostgreSQL Database ────────────────────────────────
-  - type: pserv
-    name: skills-mcp-db
-    plan: free
-    region: oregon
 
   # ── Go Backend API Server ──────────────────────────────
   - type: web
@@ -58,7 +58,6 @@ services:
         value: "500"
 
   # ── React Frontend (Static Site) ──────────────────────
-  # Static sites are always free — no plan/region fields per Render spec
   - type: web
     name: skills-mcp-frontend
     runtime: static
