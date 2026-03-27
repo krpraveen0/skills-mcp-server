@@ -6,6 +6,8 @@ import { AdminDashboard } from '@/pages/admin/AdminDashboard'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { SkillDetailPage } from '@/pages/skill/SkillDetailPage'
+import { TrendingReposPage } from '@/pages/repos/TrendingReposPage'
+import { RepoDetailPage } from '@/pages/repos/RepoDetailPage'
 import { useAppStore } from '@/store/useAppStore'
 
 // Admin-only guard — redirects to / if not an admin
@@ -34,6 +36,8 @@ export const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <ExplorerPage /> },
+      { path: 'trending', element: <TrendingReposPage /> },
+      { path: 'repos/:owner/:repo', element: <RepoDetailPage /> },
       { path: 'skills/:id', element: <SkillDetailPage /> },
       {
         path: 'admin',

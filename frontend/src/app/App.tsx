@@ -11,6 +11,7 @@ import ExtensionIcon from '@mui/icons-material/Extension'
 import VpnKeyIcon from '@mui/icons-material/VpnKey'
 import LoginIcon from '@mui/icons-material/Login'
 import PersonAddIcon from '@mui/icons-material/PersonAdd'
+import WhatshotIcon from '@mui/icons-material/Whatshot'
 import { useAppStore } from '@/store/useAppStore'
 
 const DRAWER_WIDTH = 220
@@ -27,9 +28,10 @@ export function App() {
 
   const keyDisplay = apiKey ? apiKey.substring(0, 16) + '…' : null
 
-  // Build nav items dynamically: Explorer always visible; Admin only for admins
+  // Build nav items dynamically: Trending always visible; Admin only for admins
   const navItems = [
     { label: 'Explorer', path: '/', icon: <SearchIcon /> },
+    { label: 'Trending', path: '/trending', icon: <WhatshotIcon /> },
     ...(isAdmin ? [{ label: 'Admin', path: '/admin', icon: <DashboardIcon /> }] : []),
   ]
 
@@ -70,7 +72,9 @@ export function App() {
             {navItems.map((item) => (
               <ListItemButton
                 key={item.path}
-                selected={location.pathname === item.path}
+                selected={item.path === '/'
+                  ? location.pathname === '/'
+                  : location.pathname.startsWith(item.path)}
                 onClick={() => navigate(item.path)}
                 sx={{
                   borderRadius: 1.5,

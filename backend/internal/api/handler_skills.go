@@ -34,11 +34,12 @@ func NewSkillsHandler(database *db.DB, redisCache *cache.Redis,
 	}
 }
 
-// Search handles GET /api/v1/skills?q=&tags=&limit=&offset=
+// Search handles GET /api/v1/skills?q=&tags=&limit=&offset=&min_stars=
 func (h *SkillsHandler) Search(c *gin.Context) {
 	query := c.Query("q")
 	limit := parseIntParam(c.Query("limit"), 10, 1, 50)
 	offset := parseIntParam(c.Query("offset"), 0, 0, 10000)
+	minStars := parseIntParam(c.Query("min_stars"), 0, 0, 1000000)
 
 	var tags []string
 	if t := c.Query("tags"); t != "" {
@@ -49,14 +50,14 @@ func (h *SkillsHandler) Search(c *gin.Context) {
 		}
 	}
 
-	cacheKey := cacheKeySearch(query, tags, limit, offset)
+	cacheKey := cacheKeySearch(query, tags, limit, offset, minStars)
 	var resp models.SearchResponse
 	if err := h.cache.Get(c.Request.Context(), cacheKey, &resp); err == nil {
 		c.JSON(http.StatusOK, resp)
 		return
 	}
 
-	skills, total, err := h.db.SearchSkills(c.Request.Context(), query, tags, limit, offset)
+	skills, total, err := h.db.SearchSkills(c.Request.Context(), query, tags, limit, offset, minStars)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error: "internal_error", Code: 500, Message: "Search failed",
@@ -105,19 +106,20 @@ func (h *SkillsHandler) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, s)
 }
 
-// Trending handles GET /api/v1/skills/trending?limit=&category=
+// Trending handles GET /api/v1/skills/trending?limit=&category=&min_stars=
 func (h *SkillsHandler) Trending(c *gin.Context) {
 	limit := parseIntParam(c.Query("limit"), 20, 1, 100)
+	minStars := parseIntParam(c.Query("min_stars"), 0, 0, 1000000)
 	category := c.Query("category")
 
-	cacheKey := "api:trending:" + strconv.Itoa(limit) + ":" + category
+	cacheKey := "api:trending:" + strconv.Itoa(limit) + ":" + strconv.Itoa(minStars) + ":" + category
 	var skills []models.Skill
 	if err := h.cache.Get(c.Request.Context(), cacheKey, &skills); err == nil {
 		c.JSON(http.StatusOK, gin.H{"skills": skills, "count": len(skills)})
 		return
 	}
 
-	skills, err := h.db.ListTrendingSkills(c.Request.Context(), limit, category)
+	skills, err := h.db.ListTrendingSkills(c.Request.Context(), limit, minStars, category)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error: "internal_error", Code: 500, Message: "Failed to fetch trending skills",
@@ -201,7 +203,8 @@ func parseIntParam(s string, def, min, max int) int {
 	return n
 }
 
-func cacheKeySearch(query string, tags []string, limit, offset int) string {
+func cacheKeySearch(query string, tags []string, limit, offset, minStars int) string {
 	return "api:search:" + query + ":" + strings.Join(tags, ",") +
-		":" + strconv.Itoa(limit) + ":" + strconv.Itoa(offset)
+		":" + strconv.Itoa(limit) + ":" + strconv.Itoa(offset) +
+		":" + strconv.Itoa(minStars)
 }

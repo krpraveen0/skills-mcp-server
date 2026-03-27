@@ -4,16 +4,19 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Box, Grid, Typography, TextField, InputAdornment,
   Button, Chip, CircularProgress, Pagination, Alert,
-  Tabs, Tab, Divider, Container
+  Tabs, Tab, Divider, Container, Tooltip, Switch,
+  FormControlLabel
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import AddIcon from '@mui/icons-material/Add'
+import StarIcon from '@mui/icons-material/Star'
 import { skillsService } from '@/services/skills.service'
 import { SkillCard } from '@/components/skills/SkillCard'
 import { SubmitSkillDialog } from './SubmitSkillDialog'
 
 const POPULAR_TAGS = ['devops', 'testing', 'documentation', 'api', 'database', 'security', 'frontend', 'python', 'golang']
+const MIN_QUALITY_STARS = 100
 
 export function ExplorerPage() {
   const navigate = useNavigate()
@@ -23,21 +26,23 @@ export function ExplorerPage() {
   const [page, setPage] = useState(1)
   const [tab, setTab] = useState(0) // 0 = Search, 1 = Trending
   const [submitOpen, setSubmitOpen] = useState(false)
+  const [qualityFilter, setQualityFilter] = useState(true) // default ON: 100+ stars
 
   const limit = 12
+  const minStars = qualityFilter ? MIN_QUALITY_STARS : 0
 
   // Search query
   const { data: searchData, isLoading: searchLoading, error: searchError } = useQuery({
-    queryKey: ['skills', 'search', query, selectedTags, page],
-    queryFn: () => skillsService.search(query, selectedTags, limit, (page - 1) * limit),
+    queryKey: ['skills', 'search', query, selectedTags, page, minStars],
+    queryFn: () => skillsService.search(query, selectedTags, limit, (page - 1) * limit, minStars),
     enabled: tab === 0,
     staleTime: 60 * 1000,
   })
 
   // Trending query
   const { data: trendingData, isLoading: trendingLoading } = useQuery({
-    queryKey: ['skills', 'trending'],
-    queryFn: () => skillsService.getTrending(20),
+    queryKey: ['skills', 'trending', minStars],
+    queryFn: () => skillsService.getTrending(20, minStars),
     enabled: tab === 1,
     staleTime: 5 * 60 * 1000,
   })
@@ -108,8 +113,8 @@ export function ExplorerPage() {
         </Button>
       </Box>
 
-      {/* Tag filters */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+      {/* Tag filters + Quality filter */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mb: 2 }}>
         {POPULAR_TAGS.map((tag) => (
           <Chip
             key={tag}
@@ -121,6 +126,35 @@ export function ExplorerPage() {
             onClick={() => toggleTag(tag)}
           />
         ))}
+
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Tooltip
+            title={qualityFilter
+              ? `Showing skills from repos with ≥${MIN_QUALITY_STARS} ⭐. Toggle off to see all.`
+              : 'Quality filter OFF — showing all indexed skills'}
+            placement="top"
+          >
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={qualityFilter}
+                  onChange={(e) => { setQualityFilter(e.target.checked); setPage(1) }}
+                  color="warning"
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <StarIcon sx={{ fontSize: 14, color: qualityFilter ? '#f59e0b' : 'text.disabled' }} />
+                  <Typography variant="caption" color={qualityFilter ? 'warning.main' : 'text.secondary'} fontWeight={600}>
+                    {qualityFilter ? `${MIN_QUALITY_STARS}+ stars` : 'All skills'}
+                  </Typography>
+                </Box>
+              }
+              sx={{ m: 0 }}
+            />
+          </Tooltip>
+        </Box>
       </Box>
 
       <Divider sx={{ mb: 2 }} />
@@ -153,9 +187,15 @@ export function ExplorerPage() {
       ) : (
         <>
           {tab === 0 && (
-            <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-              {total > 0 ? `${total} skills found` : 'No skills found — try different keywords'}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <Typography variant="caption" color="text.secondary">
+                {total > 0
+                  ? `${total} skill${total === 1 ? '' : 's'} found${qualityFilter ? ` · ≥${MIN_QUALITY_STARS} ⭐ quality filter active` : ''}`
+                  : qualityFilter
+                    ? `No high-quality skills found — try turning off the quality filter`
+                    : 'No skills found — try different keywords'}
+              </Typography>
+            </Box>
           )}
 
           <Grid container spacing={2}>

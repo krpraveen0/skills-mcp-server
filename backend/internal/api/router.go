@@ -21,6 +21,7 @@ type RouterDeps struct {
 	CacheTTLSearch int
 	CacheTTLTrend  int
 	CacheTTLSkill  int
+	CacheTTLRepos  int // TTL for trending repos (default 6h = 21600s)
 	AdminAPIKey    string // bypass key for bootstrapping the first DB key
 }
 
@@ -34,6 +35,11 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	// Initialize handlers
 	skillsHandler := NewSkillsHandler(deps.DB, deps.Cache, deps.CacheTTLSearch, deps.CacheTTLTrend, deps.CacheTTLSkill)
 	adminHandler  := NewAdminHandler(deps.DB, deps.Auth, deps.Crawler, deps.Cache)
+	ttlRepos := deps.CacheTTLRepos
+	if ttlRepos == 0 {
+		ttlRepos = 21600 // default 6 hours
+	}
+	reposHandler := NewReposHandler(deps.DB, deps.Cache, ttlRepos)
 
 	// Health check (no auth)
 	r.GET("/health", func(c *gin.Context) {
@@ -66,6 +72,13 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authSkills := v1.Group("/skills", AuthMiddleware(deps.Auth, deps.AdminAPIKey))
 	{
 		authSkills.POST("/submit", skillsHandler.Submit)
+	}
+
+	// ── Public repo routes (optional auth) ───────────────────────────────────
+	repos := v1.Group("/repos", OptionalAuthMiddleware(deps.Auth, deps.AdminAPIKey))
+	{
+		repos.GET("/trending", reposHandler.TrendingRepos)
+		repos.GET("/:owner/:repo", reposHandler.GetRepo)
 	}
 
 	// ── Admin routes (auth + admin role required) ─────────────────────────────

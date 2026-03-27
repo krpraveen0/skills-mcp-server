@@ -73,12 +73,29 @@ type SkillSubmission struct {
 
 // --- Request / Response types ---
 
+// TrendingRepo aggregates skills from a single GitHub repository.
+type TrendingRepo struct {
+	Owner         string     `json:"owner"`
+	Name          string     `json:"name"`
+	GitHubURL     string     `json:"github_url"`
+	Stars         int        `json:"stars"`
+	Forks         int        `json:"forks"`
+	Watchers      int        `json:"watchers"`
+	SkillCount    int        `json:"skill_count"`
+	TopScore      float64    `json:"top_score"`
+	LastUpdatedAt *time.Time `json:"last_updated_at"`
+	IndexedAt     time.Time  `json:"indexed_at"`
+	Description   string     `json:"description"`
+	Tags          []string   `json:"tags"`
+}
+
 // SearchRequest is the payload for searching skills.
 type SearchRequest struct {
-	Query  string   `json:"query" form:"q"`
-	Tags   []string `json:"tags" form:"tags"`
-	Limit  int      `json:"limit" form:"limit"`
-	Offset int      `json:"offset" form:"offset"`
+	Query    string   `json:"query"    form:"q"`
+	Tags     []string `json:"tags"     form:"tags"`
+	Limit    int      `json:"limit"    form:"limit"`
+	Offset   int      `json:"offset"   form:"offset"`
+	MinStars int      `json:"min_stars" form:"min_stars"`
 }
 
 // SearchResponse wraps a paginated list of skills.

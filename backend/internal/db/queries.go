@@ -99,7 +99,8 @@ func (d *DB) GetSkillByID(ctx context.Context, id string) (*models.Skill, error)
 }
 
 // SearchSkills performs full-text search via PostgreSQL tsvector.
-func (d *DB) SearchSkills(ctx context.Context, query string, _ []string, limit, offset int) ([]models.Skill, int, error) {
+// minStars=0 disables the stars filter; any positive value requires stars >= minStars.
+func (d *DB) SearchSkills(ctx context.Context, query string, _ []string, limit, offset, minStars int) ([]models.Skill, int, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 10
 	}
@@ -109,6 +110,11 @@ func (d *DB) SearchSkills(ctx context.Context, query string, _ []string, limit, 
 		err  error
 	)
 
+	starsCond := ""
+	if minStars > 0 {
+		starsCond = fmt.Sprintf(" AND stars >= %d", minStars)
+	}
+
 	if query != "" {
 		rows, err = d.DB.QueryContext(ctx, `
 			SELECT id, github_url, repo_owner, repo_name, file_path,
@@ -116,7 +122,7 @@ func (d *DB) SearchSkills(ctx context.Context, query string, _ []string, limit, 
 			       stars, forks, watchers, community_refs,
 			       last_updated_at, indexed_at, score, score_breakdown, is_active
 			FROM skills
-			WHERE search_vector @@ plainto_tsquery('english', $1) AND is_active = TRUE
+			WHERE search_vector @@ plainto_tsquery('english', $1) AND is_active = TRUE`+starsCond+`
 			ORDER BY score DESC
 			LIMIT $2 OFFSET $3`, query, limit, offset)
 	} else {
@@ -125,7 +131,7 @@ func (d *DB) SearchSkills(ctx context.Context, query string, _ []string, limit, 
 			       '' as content, title, description, tags,
 			       stars, forks, watchers, community_refs,
 			       last_updated_at, indexed_at, score, score_breakdown, is_active
-			FROM skills WHERE is_active = TRUE
+			FROM skills WHERE is_active = TRUE`+starsCond+`
 			ORDER BY score DESC
 			LIMIT $1 OFFSET $2`, limit, offset)
 	}
@@ -142,19 +148,26 @@ func (d *DB) SearchSkills(ctx context.Context, query string, _ []string, limit, 
 	var total int
 	if query != "" {
 		_ = d.DB.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM skills WHERE search_vector @@ plainto_tsquery('english', $1) AND is_active = TRUE`,
+			`SELECT COUNT(*) FROM skills WHERE search_vector @@ plainto_tsquery('english', $1) AND is_active = TRUE`+starsCond,
 			query).Scan(&total)
 	} else {
-		_ = d.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM skills WHERE is_active = TRUE`).Scan(&total)
+		_ = d.DB.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM skills WHERE is_active = TRUE`+starsCond).Scan(&total)
 	}
 
 	return skills, total, nil
 }
 
 // ListTrendingSkills returns the top-N skills by composite score.
-func (d *DB) ListTrendingSkills(ctx context.Context, limit int, _ string) ([]models.Skill, error) {
+// minStars=0 disables the stars filter.
+func (d *DB) ListTrendingSkills(ctx context.Context, limit, minStars int, _ string) ([]models.Skill, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
+	}
+
+	starsCond := ""
+	if minStars > 0 {
+		starsCond = fmt.Sprintf(" AND stars >= %d", minStars)
 	}
 
 	rows, err := d.DB.QueryContext(ctx, `
@@ -162,7 +175,7 @@ func (d *DB) ListTrendingSkills(ctx context.Context, limit int, _ string) ([]mod
 		       '' as content, title, description, tags,
 		       stars, forks, watchers, community_refs,
 		       last_updated_at, indexed_at, score, score_breakdown, is_active
-		FROM skills WHERE is_active = TRUE
+		FROM skills WHERE is_active = TRUE`+starsCond+`
 		ORDER BY score DESC
 		LIMIT $1`, limit)
 	if err != nil {
@@ -170,6 +183,110 @@ func (d *DB) ListTrendingSkills(ctx context.Context, limit int, _ string) ([]mod
 	}
 	defer rows.Close()
 	return scanSkills(rows)
+}
+
+// GetTrendingRepos groups skills by repository and returns repos ranked by star count.
+// period: "today" (indexed in last 24h), "week" (last 7d), "month" (last 30d), "all" (no filter).
+// minStars: minimum repo star count (0 = no filter).
+func (d *DB) GetTrendingRepos(ctx context.Context, period string, minStars, limit int) ([]models.TrendingRepo, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 10
+	}
+
+	// Build period condition on last_updated_at (GitHub repo activity)
+	periodCond := ""
+	switch period {
+	case "today":
+		periodCond = " AND indexed_at >= NOW() - INTERVAL '1 day'"
+	case "week":
+		periodCond = " AND last_updated_at >= NOW() - INTERVAL '7 days'"
+	case "month":
+		periodCond = " AND last_updated_at >= NOW() - INTERVAL '30 days'"
+	}
+
+	starsCond := ""
+	if minStars > 0 {
+		starsCond = fmt.Sprintf(" AND stars >= %d", minStars)
+	}
+
+	// Use DISTINCT ON to pick the best skill per repo (highest score) while also
+	// computing aggregate stats across all skills in that repo.
+	query := `
+		SELECT owner, name, github_url, stars, forks, watchers,
+		       skill_count, top_score, last_updated_at, indexed_at,
+		       description, tags
+		FROM (
+			SELECT DISTINCT ON (repo_owner, repo_name)
+				repo_owner                                                         AS owner,
+				repo_name                                                          AS name,
+				'https://github.com/' || repo_owner || '/' || repo_name           AS github_url,
+				MAX(stars)         OVER (PARTITION BY repo_owner, repo_name)       AS stars,
+				MAX(forks)         OVER (PARTITION BY repo_owner, repo_name)       AS forks,
+				MAX(watchers)      OVER (PARTITION BY repo_owner, repo_name)       AS watchers,
+				COUNT(*)           OVER (PARTITION BY repo_owner, repo_name)       AS skill_count,
+				MAX(score)         OVER (PARTITION BY repo_owner, repo_name)       AS top_score,
+				MAX(last_updated_at) OVER (PARTITION BY repo_owner, repo_name)     AS last_updated_at,
+				MAX(indexed_at)    OVER (PARTITION BY repo_owner, repo_name)       AS indexed_at,
+				description,
+				tags
+			FROM skills
+			WHERE is_active = TRUE` + starsCond + periodCond + `
+			ORDER BY repo_owner, repo_name, score DESC
+		) t
+		ORDER BY stars DESC
+		LIMIT $1`
+
+	rows, err := d.DB.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var repos []models.TrendingRepo
+	for rows.Next() {
+		var r models.TrendingRepo
+		var tagsJSON string
+		if err := rows.Scan(
+			&r.Owner, &r.Name, &r.GitHubURL,
+			&r.Stars, &r.Forks, &r.Watchers,
+			&r.SkillCount, &r.TopScore, &r.LastUpdatedAt, &r.IndexedAt,
+			&r.Description, &tagsJSON,
+		); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(tagsJSON), &r.Tags); err != nil || r.Tags == nil {
+			r.Tags = []string{}
+		}
+		repos = append(repos, r)
+	}
+	if repos == nil {
+		repos = []models.TrendingRepo{}
+	}
+	return repos, nil
+}
+
+// GetRepoSkills returns all active skills for a given repo, ordered by score.
+func (d *DB) GetRepoSkills(ctx context.Context, owner, name string) ([]models.Skill, error) {
+	rows, err := d.DB.QueryContext(ctx, `
+		SELECT id, github_url, repo_owner, repo_name, file_path,
+		       '' as content, title, description, tags,
+		       stars, forks, watchers, community_refs,
+		       last_updated_at, indexed_at, score, score_breakdown, is_active
+		FROM skills
+		WHERE repo_owner = $1 AND repo_name = $2 AND is_active = TRUE
+		ORDER BY score DESC`, owner, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	skills, err := scanSkills(rows)
+	if err != nil {
+		return nil, err
+	}
+	if skills == nil {
+		skills = []models.Skill{}
+	}
+	return skills, nil
 }
 
 // GetSkillStats returns aggregate stats about indexed skills.
@@ -188,7 +305,7 @@ func (d *DB) CreateAPIKey(ctx context.Context, key *models.APIKey) error {
 		INSERT INTO api_keys (id, key_hash, key_prefix, name, user_email, rate_limit, is_admin, created_at, is_active)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		key.ID, key.KeyHash, key.KeyPrefix, key.Name, key.UserEmail,
-		key.RateLimit, false, time.Now(), true,
+		key.RateLimit, key.IsAdmin, time.Now(), true,
 	)
 	return err
 }
@@ -197,12 +314,12 @@ func (d *DB) CreateAPIKey(ctx context.Context, key *models.APIKey) error {
 func (d *DB) GetAPIKeyByHash(ctx context.Context, hash string) (*models.APIKey, error) {
 	row := d.DB.QueryRowContext(ctx, `
 		SELECT id, key_hash, key_prefix, name, user_email,
-		       rate_limit, calls_today, total_calls, created_at, last_used_at, is_active
+		       rate_limit, calls_today, total_calls, is_admin, created_at, last_used_at, is_active
 		FROM api_keys WHERE key_hash = $1 AND is_active = TRUE`, hash)
 
 	var k models.APIKey
 	if err := row.Scan(&k.ID, &k.KeyHash, &k.KeyPrefix, &k.Name, &k.UserEmail,
-		&k.RateLimit, &k.CallsToday, &k.TotalCalls, &k.CreatedAt, &k.LastUsedAt, &k.IsActive); err != nil {
+		&k.RateLimit, &k.CallsToday, &k.TotalCalls, &k.IsAdmin, &k.CreatedAt, &k.LastUsedAt, &k.IsActive); err != nil {
 		return nil, err
 	}
 	return &k, nil
@@ -223,7 +340,7 @@ func (d *DB) IncrementAPIKeyUsage(ctx context.Context, id string) error {
 func (d *DB) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
 	rows, err := d.DB.QueryContext(ctx, `
 		SELECT id, key_hash, key_prefix, name, user_email,
-		       rate_limit, calls_today, total_calls, created_at, last_used_at, is_active
+		       rate_limit, calls_today, total_calls, is_admin, created_at, last_used_at, is_active
 		FROM api_keys ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -234,7 +351,7 @@ func (d *DB) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
 	for rows.Next() {
 		var k models.APIKey
 		if err := rows.Scan(&k.ID, &k.KeyHash, &k.KeyPrefix, &k.Name, &k.UserEmail,
-			&k.RateLimit, &k.CallsToday, &k.TotalCalls, &k.CreatedAt, &k.LastUsedAt, &k.IsActive); err != nil {
+			&k.RateLimit, &k.CallsToday, &k.TotalCalls, &k.IsAdmin, &k.CreatedAt, &k.LastUsedAt, &k.IsActive); err != nil {
 			return nil, err
 		}
 		keys = append(keys, k)
