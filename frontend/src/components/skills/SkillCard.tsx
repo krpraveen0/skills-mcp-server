@@ -92,9 +92,9 @@ export function SkillCard({ skill, onClick, rank }: SkillCardProps) {
         </Typography>
 
         {/* Tags */}
-        {skill.tags.length > 0 && (
+        {(skill.tags ?? []).length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1.5 }}>
-            {skill.tags.slice(0, 5).map((tag) => (
+            {(skill.tags ?? []).slice(0, 5).map((tag) => (
               <Chip
                 key={tag}
                 label={tag}
@@ -103,9 +103,9 @@ export function SkillCard({ skill, onClick, rank }: SkillCardProps) {
                 sx={{ borderColor: 'divider', color: 'text.secondary', height: 20 }}
               />
             ))}
-            {skill.tags.length > 5 && (
+            {(skill.tags ?? []).length > 5 && (
               <Chip
-                label={`+${skill.tags.length - 5}`}
+                label={`+${(skill.tags ?? []).length - 5}`}
                 size="small"
                 sx={{ height: 20, bgcolor: 'action.selected' }}
               />
