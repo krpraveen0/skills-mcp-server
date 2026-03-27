@@ -100,6 +100,13 @@ type CreateAPIKeyRequest struct {
 	Name      string `json:"name" binding:"required"`
 	Email     string `json:"email"`
 	RateLimit int    `json:"rate_limit"`
+	IsAdmin   bool   `json:"is_admin"`
+}
+
+// RegisterRequest is the self-service payload for creating a public API key.
+type RegisterRequest struct {
+	Name  string `json:"name" binding:"required"`
+	Email string `json:"email" binding:"required"`
 }
 
 // CreateAPIKeyResponse includes the raw key (shown once).

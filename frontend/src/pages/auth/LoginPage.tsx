@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link as RouterLink } from 'react-router-dom'
 import {
   Box, Card, CardContent, TextField, Button,
   Typography, Alert, CircularProgress, InputAdornment,
-  IconButton
+  IconButton, Divider, Link
 } from '@mui/material'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
@@ -28,11 +28,11 @@ export function LoginPage() {
     setLoading(true)
     setError('')
     try {
-      // Validate key by hitting the health-like endpoint
-      await apiClient.get('/api/v1/skills/trending?limit=1', {
+      // Validate key via /auth/me — returns is_admin flag too
+      const { data } = await apiClient.get('/api/v1/auth/me', {
         headers: { Authorization: `Bearer ${key}` },
       })
-      setApiKey(key)
+      setApiKey(key, data.is_admin === true)
       navigate('/')
     } catch {
       setError('Invalid API key or server unreachable. Please check your key and try again.')
@@ -77,10 +77,13 @@ export function LoginPage() {
           </Box>
 
           <Typography variant="h5" fontWeight={700} sx={{ mb: 0.5 }}>
-            Enter your API Key
+            Sign in with API Key
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Get your key from an admin or create one in the admin panel.
+            Don't have a key?{' '}
+            <Link component={RouterLink} to="/register" fontWeight={600}>
+              Create a free account
+            </Link>
           </Typography>
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -120,6 +123,16 @@ export function LoginPage() {
           >
             {loading ? 'Verifying…' : 'Connect'}
           </Button>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="body2" color="text.secondary" align="center">
+            Want to browse first?{' '}
+            <Link component={RouterLink} to="/" fontWeight={600}>
+              Explore skills
+            </Link>{' '}
+            without signing in.
+          </Typography>
         </CardContent>
       </Card>
     </Box>

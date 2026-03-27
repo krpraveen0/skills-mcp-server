@@ -154,3 +154,55 @@ func (h *AdminHandler) TriggerCrawl(c *gin.Context) {
 		"message": "Crawl job triggered and running in the background.",
 	})
 }
+
+// Register handles POST /api/v1/auth/register — self-service key creation.
+// No authentication required; generates a key with is_admin=false and a
+// conservative rate limit (100 req/day).
+func (h *AdminHandler) Register(c *gin.Context) {
+	var req models.RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error: "bad_request", Code: 400, Message: err.Error(),
+		})
+		return
+	}
+
+	createReq := &models.CreateAPIKeyRequest{
+		Name:      req.Name,
+		Email:     req.Email,
+		RateLimit: 100,
+		IsAdmin:   false,
+	}
+
+	resp, err := h.authSvc.GenerateKey(c.Request.Context(), createReq)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: "internal_error", Code: 500, Message: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, resp)
+}
+
+// Me handles GET /api/v1/auth/me — returns the current key's info.
+// Used by the frontend to verify a key and retrieve the is_admin flag.
+func (h *AdminHandler) Me(c *gin.Context) {
+	raw, _ := c.Get(apiKeyContextKey)
+	key, ok := raw.(*models.APIKey)
+	if !ok || key == nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{
+			Error: "unauthorized", Code: 401, Message: "Not authenticated",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"id":          key.ID,
+		"name":        key.Name,
+		"user_email":  key.UserEmail,
+		"is_admin":    key.IsAdmin,
+		"rate_limit":  key.RateLimit,
+		"calls_today": key.CallsToday,
+		"key_prefix":  key.KeyPrefix,
+	})
+}

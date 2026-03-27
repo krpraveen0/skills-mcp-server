@@ -8,6 +8,7 @@ export interface APIKey {
   rate_limit: number
   calls_today: number
   total_calls: number
+  is_admin: boolean
   created_at: string
   last_used_at: string | null
   is_active: boolean
@@ -46,11 +47,12 @@ export const adminService = {
     return data
   },
 
-  createKey: async (name: string, email: string, rateLimit?: number): Promise<APIKey> => {
+  createKey: async (name: string, email: string, rateLimit?: number, isAdmin?: boolean): Promise<APIKey> => {
     const { data } = await apiClient.post<APIKey>('/api/v1/admin/keys', {
       name,
       email,
       rate_limit: rateLimit,
+      is_admin: isAdmin ?? false,
     })
     return data
   },

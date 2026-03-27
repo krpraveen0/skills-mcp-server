@@ -56,6 +56,7 @@ func (s *Service) GenerateKey(ctx context.Context, req *models.CreateAPIKeyReque
 		Name:      req.Name,
 		UserEmail: req.Email,
 		RateLimit: rateLimit,
+		IsAdmin:   req.IsAdmin,
 		IsActive:  true,
 		CreatedAt: time.Now(),
 	}

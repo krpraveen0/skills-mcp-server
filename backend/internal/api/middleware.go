@@ -35,6 +35,7 @@ func AuthMiddleware(authSvc *auth.Service, adminKey string) gin.HandlerFunc {
 				ID:        "admin-env",
 				Name:      "Admin (env bootstrap)",
 				IsActive:  true,
+				IsAdmin:   true,
 				RateLimit: 999999,
 			})
 			c.Next()
@@ -56,9 +57,59 @@ func AuthMiddleware(authSvc *auth.Service, adminKey string) gin.HandlerFunc {
 	}
 }
 
-// AdminMiddleware is a placeholder for admin-only routes.
+// OptionalAuthMiddleware extracts the API key if present but does NOT require
+// it. Public routes use this so anonymous users can browse freely, while
+// authenticated users still get usage tracking and higher rate limits.
+func OptionalAuthMiddleware(authSvc *auth.Service, adminKey string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rawKey := extractBearerToken(c)
+		if rawKey == "" {
+			c.Next()
+			return
+		}
+
+		// Admin bootstrap
+		if adminKey != "" && rawKey == adminKey {
+			c.Set(apiKeyContextKey, &models.APIKey{
+				ID:        "admin-env",
+				Name:      "Admin (env bootstrap)",
+				IsActive:  true,
+				IsAdmin:   true,
+				RateLimit: 999999,
+			})
+			c.Next()
+			return
+		}
+
+		if key, err := authSvc.ValidateKey(c.Request.Context(), rawKey); err == nil {
+			c.Set(apiKeyContextKey, key)
+		}
+		c.Next()
+	}
+}
+
+// AdminMiddleware checks that the authenticated user has admin privileges.
+// Must be used after AuthMiddleware (which sets the apiKeyContextKey).
 func AdminMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		raw, exists := c.Get(apiKeyContextKey)
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusForbidden, models.ErrorResponse{
+				Error:   "forbidden",
+				Code:    403,
+				Message: "Admin access required",
+			})
+			return
+		}
+		key, ok := raw.(*models.APIKey)
+		if !ok || !key.IsAdmin {
+			c.AbortWithStatusJSON(http.StatusForbidden, models.ErrorResponse{
+				Error:   "forbidden",
+				Code:    403,
+				Message: "Admin access required",
+			})
+			return
+		}
 		c.Next()
 	}
 }

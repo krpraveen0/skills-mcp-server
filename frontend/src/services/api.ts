@@ -19,14 +19,17 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-// Global error handling
+// Global error handling — only redirect on 401 if the user was authenticated.
+// Anonymous requests to public endpoints should NOT trigger a login redirect.
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear invalid key and redirect to auth
-      localStorage.removeItem('skills_api_key')
-      window.location.href = '/auth'
+      const wasAuthenticated = Boolean(localStorage.getItem('skills_api_key'))
+      if (wasAuthenticated) {
+        localStorage.removeItem('skills_api_key')
+        window.location.href = '/auth'
+      }
     }
     return Promise.reject(error)
   }

@@ -2,33 +2,36 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
   Box, AppBar, Toolbar, Typography, IconButton,
   Drawer, List, ListItemButton, ListItemIcon, ListItemText,
-  Tooltip, Chip
+  Tooltip, Chip, Button
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
 import DashboardIcon from '@mui/icons-material/Dashboard'
 import LogoutIcon from '@mui/icons-material/Logout'
 import ExtensionIcon from '@mui/icons-material/Extension'
 import VpnKeyIcon from '@mui/icons-material/VpnKey'
+import LoginIcon from '@mui/icons-material/Login'
+import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import { useAppStore } from '@/store/useAppStore'
 
 const DRAWER_WIDTH = 220
 
-const navItems = [
-  { label: 'Explorer', path: '/', icon: <SearchIcon /> },
-  { label: 'Admin', path: '/admin', icon: <DashboardIcon /> },
-]
-
 export function App() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { clearAuth, apiKey } = useAppStore()
+  const { clearAuth, apiKey, isAuthenticated, isAdmin } = useAppStore()
 
   const handleLogout = () => {
     clearAuth()
     navigate('/auth')
   }
 
-  const keyDisplay = apiKey ? apiKey.substring(0, 16) + '…' : 'No key'
+  const keyDisplay = apiKey ? apiKey.substring(0, 16) + '…' : null
+
+  // Build nav items dynamically: Explorer always visible; Admin only for admins
+  const navItems = [
+    { label: 'Explorer', path: '/', icon: <SearchIcon /> },
+    ...(isAdmin ? [{ label: 'Admin', path: '/admin', icon: <DashboardIcon /> }] : []),
+  ]
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -89,26 +92,53 @@ export function App() {
           </List>
         </Box>
 
-        {/* Key display + logout at bottom */}
+        {/* Bottom section: auth-aware */}
         <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-            <VpnKeyIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-            <Chip
-              label={keyDisplay}
-              size="small"
-              sx={{ fontSize: '0.65rem', height: 20, flex: 1, justifyContent: 'flex-start' }}
-            />
-          </Box>
-          <Tooltip title="Sign out">
-            <IconButton
-              onClick={handleLogout}
-              size="small"
-              sx={{ width: '100%', borderRadius: 1.5, justifyContent: 'flex-start', px: 1 }}
-            >
-              <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
-              <Typography variant="caption" color="text.secondary">Sign out</Typography>
-            </IconButton>
-          </Tooltip>
+          {isAuthenticated && keyDisplay ? (
+            <>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <VpnKeyIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                <Chip
+                  label={keyDisplay}
+                  size="small"
+                  sx={{ fontSize: '0.65rem', height: 20, flex: 1, justifyContent: 'flex-start' }}
+                />
+              </Box>
+              <Tooltip title="Sign out">
+                <IconButton
+                  onClick={handleLogout}
+                  size="small"
+                  sx={{ width: '100%', borderRadius: 1.5, justifyContent: 'flex-start', px: 1 }}
+                >
+                  <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
+                  <Typography variant="caption" color="text.secondary">Sign out</Typography>
+                </IconButton>
+              </Tooltip>
+            </>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Button
+                fullWidth
+                variant="contained"
+                size="small"
+                startIcon={<LoginIcon fontSize="small" />}
+                onClick={() => navigate('/auth')}
+                sx={{ borderRadius: 1.5, justifyContent: 'flex-start', fontSize: '0.8rem' }}
+              >
+                Sign in
+              </Button>
+              <Button
+                fullWidth
+                variant="outlined"
+                size="small"
+                startIcon={<PersonAddIcon fontSize="small" />}
+                onClick={() => navigate('/register')}
+                sx={{ borderRadius: 1.5, justifyContent: 'flex-start', fontSize: '0.8rem' }}
+              >
+                Create account
+              </Button>
+            </Box>
+          )}
         </Box>
       </Drawer>
 

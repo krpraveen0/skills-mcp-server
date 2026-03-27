@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Box, Container, Typography, Chip, CircularProgress,
   Alert, Button, Divider, Paper, Grid, LinearProgress,
-  Stack
+  Stack, Tooltip
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import StarIcon from '@mui/icons-material/Star'
@@ -12,14 +12,33 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import DescriptionIcon from '@mui/icons-material/Description'
+import TerminalIcon from '@mui/icons-material/Terminal'
 import { skillsService } from '@/services/skills.service'
 import { ScoreBadge } from '@/components/skills/ScoreBadge'
+import { useAppStore } from '@/store/useAppStore'
 import { useState } from 'react'
+
+// Generates the claude_desktop_config.json snippet for this MCP server
+function buildMcpConfig(apiKey: string | null): string {
+  const serverUrl = window.location.origin
+  const config = {
+    mcpServers: {
+      'skills-mcp': {
+        command: 'npx',
+        args: ['-y', 'mcp-remote', `${serverUrl}/mcp`],
+        ...(apiKey ? { env: { SKILLS_MCP_API_KEY: apiKey } } : {}),
+      },
+    },
+  }
+  return JSON.stringify(config, null, 2)
+}
 
 export function SkillDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { apiKey } = useAppStore()
   const [copied, setCopied] = useState(false)
+  const [mcpCopied, setMcpCopied] = useState(false)
 
   const { data: skill, isLoading, error } = useQuery({
     queryKey: ['skill', id],
@@ -32,6 +51,12 @@ export function SkillDetailPage() {
     navigator.clipboard.writeText(skill.github_url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleMcpCopy = () => {
+    navigator.clipboard.writeText(buildMcpConfig(apiKey))
+    setMcpCopied(true)
+    setTimeout(() => setMcpCopied(false), 2000)
   }
 
   if (isLoading) {
@@ -258,7 +283,50 @@ export function SkillDetailPage() {
               >
                 {copied ? 'Copied!' : 'Copy GitHub URL'}
               </Button>
+              <Tooltip
+                title={
+                  apiKey
+                    ? 'Copies the claude_desktop_config.json snippet with your API key'
+                    : 'Sign in to include your API key in the config'
+                }
+                placement="left"
+              >
+                <span style={{ width: '100%' }}>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<TerminalIcon />}
+                    onClick={handleMcpCopy}
+                    fullWidth
+                    sx={{
+                      borderColor: 'rgba(99,102,241,0.4)',
+                      color: 'primary.light',
+                      '&:hover': { borderColor: 'primary.main', bgcolor: 'rgba(99,102,241,0.08)' },
+                    }}
+                  >
+                    {mcpCopied ? 'Config copied!' : 'Copy MCP config'}
+                  </Button>
+                </span>
+              </Tooltip>
             </Stack>
+
+            {/* MCP config preview */}
+            <Box
+              sx={{
+                mt: 2,
+                p: 1.5,
+                bgcolor: 'rgba(0,0,0,0.2)',
+                borderRadius: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.68rem',
+                color: 'text.secondary',
+                whiteSpace: 'pre',
+                overflow: 'auto',
+                maxHeight: 140,
+              }}
+            >
+              {buildMcpConfig(apiKey)}
+            </Box>
           </Paper>
         </Grid>
       </Grid>

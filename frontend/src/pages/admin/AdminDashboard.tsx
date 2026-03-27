@@ -2,7 +2,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Box, Grid, Card, CardContent, Typography, Button,
   Chip, CircularProgress, Alert, Divider, Container,
-  Table, TableBody, TableCell, TableHead, TableRow
+  Table, TableBody, TableCell, TableHead, TableRow,
+  TextField, Switch, FormControlLabel, Paper, IconButton,
+  Collapse
 } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
@@ -11,10 +13,21 @@ import VpnKeyIcon from '@mui/icons-material/VpnKey'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
-import { adminService } from '@/services/admin.service'
+import DeleteIcon from '@mui/icons-material/Delete'
+import AddIcon from '@mui/icons-material/Add'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import { adminService, type APIKey } from '@/services/admin.service'
+import { useState } from 'react'
 
 export function AdminDashboard() {
   const qc = useQueryClient()
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [newKeyName, setNewKeyName] = useState('')
+  const [newKeyEmail, setNewKeyEmail] = useState('')
+  const [newKeyRateLimit, setNewKeyRateLimit] = useState('1000')
+  const [newKeyIsAdmin, setNewKeyIsAdmin] = useState(false)
+  const [createdKey, setCreatedKey] = useState<APIKey | null>(null)
+  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null)
 
   const { data: stats, isLoading, refetch } = useQuery({
     queryKey: ['admin', 'stats'],
@@ -34,6 +47,36 @@ export function AdminDashboard() {
       setTimeout(() => qc.invalidateQueries({ queryKey: ['admin'] }), 2000)
     },
   })
+
+  const { data: keysData, refetch: refetchKeys } = useQuery({
+    queryKey: ['admin', 'keys'],
+    queryFn: adminService.listKeys,
+  })
+
+  const createKeyMutation = useMutation({
+    mutationFn: () =>
+      adminService.createKey(newKeyName, newKeyEmail, parseInt(newKeyRateLimit) || 1000, newKeyIsAdmin),
+    onSuccess: (data) => {
+      setCreatedKey(data as unknown as APIKey)
+      setNewKeyName('')
+      setNewKeyEmail('')
+      setNewKeyRateLimit('1000')
+      setNewKeyIsAdmin(false)
+      refetchKeys()
+      qc.invalidateQueries({ queryKey: ['admin', 'stats'] })
+    },
+  })
+
+  const revokeKeyMutation = useMutation({
+    mutationFn: adminService.revokeKey,
+    onSuccess: () => refetchKeys(),
+  })
+
+  const handleCopyKey = (key: string, id: string) => {
+    navigator.clipboard.writeText(key)
+    setCopiedKeyId(id)
+    setTimeout(() => setCopiedKeyId(null), 2000)
+  }
 
   const statCards = [
     {
@@ -180,6 +223,145 @@ export function AdminDashboard() {
           ) : (
             <Typography variant="body2" color="text.secondary">
               No crawl jobs yet. Trigger your first crawl above.
+            </Typography>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* API Keys Management */}
+      <Card sx={{ mt: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="h6" fontWeight={600}>API Keys</Typography>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => { setShowCreateForm((v) => !v); setCreatedKey(null) }}
+            >
+              {showCreateForm ? 'Cancel' : 'Create Key'}
+            </Button>
+          </Box>
+          <Divider sx={{ mb: 2 }} />
+
+          {/* Create key form */}
+          <Collapse in={showCreateForm}>
+            <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 1.5 }}>
+              <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>New API Key</Typography>
+              {createdKey?.raw_key && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  <Typography variant="body2" sx={{ mb: 0.5 }}>Key created! Copy it now — it won't be shown again:</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography sx={{ fontFamily: 'monospace', fontSize: '0.8rem', flex: 1 }}>
+                      {createdKey.raw_key}
+                    </Typography>
+                    <IconButton size="small" onClick={() => handleCopyKey(createdKey.raw_key!, createdKey.id)}>
+                      {copiedKeyId === createdKey.id ? <CheckCircleIcon fontSize="small" color="success" /> : <ContentCopyIcon fontSize="small" />}
+                    </IconButton>
+                  </Box>
+                </Alert>
+              )}
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth size="small" label="Name" required
+                    value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth size="small" label="Email"
+                    value={newKeyEmail} onChange={(e) => setNewKeyEmail(e.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={2}>
+                  <TextField
+                    fullWidth size="small" label="Rate limit/day" type="number"
+                    value={newKeyRateLimit} onChange={(e) => setNewKeyRateLimit(e.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={2} sx={{ display: 'flex', alignItems: 'center' }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        size="small"
+                        checked={newKeyIsAdmin}
+                        onChange={(e) => setNewKeyIsAdmin(e.target.checked)}
+                      />
+                    }
+                    label={<Typography variant="body2">Admin</Typography>}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Button
+                    variant="contained" size="small"
+                    onClick={() => createKeyMutation.mutate()}
+                    disabled={createKeyMutation.isPending || !newKeyName}
+                    startIcon={createKeyMutation.isPending ? <CircularProgress size={14} /> : <AddIcon />}
+                  >
+                    {createKeyMutation.isPending ? 'Creating…' : 'Create'}
+                  </Button>
+                </Grid>
+              </Grid>
+            </Paper>
+          </Collapse>
+
+          {/* Keys table */}
+          {keysData?.keys && keysData.keys.length > 0 ? (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Prefix</TableCell>
+                  <TableCell align="center">Admin</TableCell>
+                  <TableCell align="right">Rate limit</TableCell>
+                  <TableCell align="right">Calls today</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Created</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {keysData.keys.map((key) => (
+                  <TableRow key={key.id} hover>
+                    <TableCell sx={{ fontWeight: 500 }}>{key.name}</TableCell>
+                    <TableCell sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>{key.user_email || '—'}</TableCell>
+                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{key.key_prefix}</TableCell>
+                    <TableCell align="center">
+                      {key.is_admin && <Chip label="Admin" size="small" color="warning" />}
+                    </TableCell>
+                    <TableCell align="right">{key.rate_limit.toLocaleString()}</TableCell>
+                    <TableCell align="right">{key.calls_today}</TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        label={key.is_active ? 'Active' : 'Revoked'}
+                        color={key.is_active ? 'success' : 'default'}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {new Date(key.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell align="right">
+                      {key.is_active && (
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => revokeKeyMutation.mutate(key.id)}
+                          disabled={revokeKeyMutation.isPending}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No API keys yet. Create one above.
             </Typography>
           )}
         </CardContent>

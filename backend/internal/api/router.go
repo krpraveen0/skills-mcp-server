@@ -43,40 +43,55 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	// MCP endpoint (auth required)
 	r.POST("/mcp", AuthMiddleware(deps.Auth, deps.AdminAPIKey), deps.MCPServer.Handle)
 
-	// API v1 — protected routes
-	v1 := r.Group("/api/v1", AuthMiddleware(deps.Auth, deps.AdminAPIKey))
+	v1 := r.Group("/api/v1")
+
+	// ── Public auth endpoints (no key required) ──────────────────────────────
+	authGroup := v1.Group("/auth")
 	{
-		// Skills
-		skills := v1.Group("/skills")
+		// Self-service registration: POST /api/v1/auth/register
+		authGroup.POST("/register", adminHandler.Register)
+		// Verify key and get profile: GET /api/v1/auth/me (auth required)
+		authGroup.GET("/me", AuthMiddleware(deps.Auth, deps.AdminAPIKey), adminHandler.Me)
+	}
+
+	// ── Public skill routes (optional auth for rate-limit tracking) ──────────
+	publicSkills := v1.Group("/skills", OptionalAuthMiddleware(deps.Auth, deps.AdminAPIKey))
+	{
+		publicSkills.GET("", skillsHandler.Search)
+		publicSkills.GET("/trending", skillsHandler.Trending)
+		publicSkills.GET("/:id", skillsHandler.GetByID)
+	}
+
+	// ── Authenticated skill routes ────────────────────────────────────────────
+	authSkills := v1.Group("/skills", AuthMiddleware(deps.Auth, deps.AdminAPIKey))
+	{
+		authSkills.POST("/submit", skillsHandler.Submit)
+	}
+
+	// ── Admin routes (auth + admin role required) ─────────────────────────────
+	admin := v1.Group("/admin",
+		AuthMiddleware(deps.Auth, deps.AdminAPIKey),
+		AdminMiddleware(),
+	)
+	{
+		admin.GET("/stats", adminHandler.Stats)
+
+		keys := admin.Group("/keys")
 		{
-			skills.GET("", skillsHandler.Search)
-			skills.GET("/trending", skillsHandler.Trending)
-			skills.GET("/:id", skillsHandler.GetByID)
-			skills.POST("/submit", skillsHandler.Submit)
+			keys.GET("", adminHandler.ListKeys)
+			keys.POST("", adminHandler.CreateKey)
+			keys.DELETE("/:id", adminHandler.RevokeKey)
 		}
 
-		// Admin routes (admin key required)
-		admin := v1.Group("/admin", AdminMiddleware())
+		crawl := admin.Group("/crawl")
 		{
-			admin.GET("/stats", adminHandler.Stats)
+			crawl.GET("/jobs", adminHandler.ListCrawlJobs)
+			crawl.POST("/trigger", adminHandler.TriggerCrawl)
+		}
 
-			keys := admin.Group("/keys")
-			{
-				keys.GET("", adminHandler.ListKeys)
-				keys.POST("", adminHandler.CreateKey)
-				keys.DELETE("/:id", adminHandler.RevokeKey)
-			}
-
-			crawl := admin.Group("/crawl")
-			{
-				crawl.GET("/jobs", adminHandler.ListCrawlJobs)
-				crawl.POST("/trigger", adminHandler.TriggerCrawl)
-			}
-
-			cache := admin.Group("/cache")
-			{
-				cache.POST("/flush", adminHandler.FlushCache)
-			}
+		cache := admin.Group("/cache")
+		{
+			cache.POST("/flush", adminHandler.FlushCache)
 		}
 	}
 
